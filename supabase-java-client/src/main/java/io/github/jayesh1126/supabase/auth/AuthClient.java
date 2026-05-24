@@ -3,6 +3,7 @@ package io.github.jayesh1126.supabase.auth;
 import io.github.jayesh1126.supabase.auth.model.AuthResponse;
 import io.github.jayesh1126.supabase.auth.model.User;
 import io.github.jayesh1126.supabase.core.SupabaseHttpClient;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.HashMap;
@@ -13,18 +14,33 @@ import java.util.Objects;
 /**
  * Client for Supabase Authentication API.
  *
- * <p>Provides methods for user sign-up, sign-in, token refresh, and sign-out.
+ * <p>Provides methods for:
+ * <ul>
+ *     <li>Email/password sign-up</li>
+ *     <li>Email/password sign-in</li>
+ *     <li>Token refresh</li>
+ *     <li>Authenticated user retrieval</li>
+ *     <li>Sign-out</li>
+ * </ul>
  *
- * <p>Instances are thread-safe and can be reused across the application.
+ * <p>Instances are immutable and thread-safe.
  *
- * <p>Typically obtained via {@link io.github.jayesh1126.supabase.SupabaseClient#auth()}.
+ * <p>Typically obtained via:
+ * {@link io.github.jayesh1126.supabase.SupabaseClient#auth()}.
  */
 public class AuthClient {
+
+    private static final String AUTH_ENDPOINT = "/auth/v1";
+
+    private static final List<Map.Entry<String, String>> PASSWORD_GRANT =
+            List.of(Map.entry("grant_type", "password"));
+
+    private static final List<Map.Entry<String, String>> REFRESH_GRANT =
+            List.of(Map.entry("grant_type", "refresh_token"));
 
     private final SupabaseHttpClient http;
     private final ObjectMapper objectMapper;
     private final String accessToken;
-    private static final String AUTH_ENDPOINT = "/auth/v1";
 
     /**
     * Package-private constructor.
@@ -39,84 +55,75 @@ public class AuthClient {
         this.accessToken = accessToken;
     }
 
-
+    /**
+     * Signs up a new user using email/password authentication.
+     */
     public AuthResponse signUpWithEmail(String email, String password) {
-        Objects.requireNonNull(email, "email must not be null");
-        Objects.requireNonNull(password, "password must not be null");
+        requireNonBlank(email, "email");
+        requireNonBlank(password, "password");
 
-        try {
-            Map<String, String> body = new HashMap<>();
-            body.put("email", email);
-            body.put("password", password);
+        Map<String, String> body = Map.of(
+                "email", email,
+                "password", password
+        );
 
-            String jsonBody = objectMapper.writeValueAsString(body);
-
-            String responseBody = http.post(AUTH_ENDPOINT + "/signup",
-                    null,
-                    jsonBody,
-                    null
-            );
-
-            return objectMapper.readValue(responseBody, AuthResponse.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to sign up with email", e);
-        }
+        return post(
+                "/signup",
+                null,
+                body,
+                AuthResponse.class,
+                "Failed to sign up user"
+        );
     }
 
+    /**
+     * Signs in a user using email/password authentication.
+     */
     public AuthResponse signInWithEmail(String email, String password) {
-        Objects.requireNonNull(email, "email must not be null");
-        Objects.requireNonNull(password, "password must not be null");
+        requireNonBlank(email, "email");
+        requireNonBlank(password, "password");
 
-        try {
-            Map<String, String> body = new HashMap<>();
-            body.put("email", email);
-            body.put("password", password);
+        Map<String, String> body = Map.of(
+                "email", email,
+                "password", password
+        );
 
-            String jsonBody = objectMapper.writeValueAsString(body);
-
-            String responseBody = http.post(
-                    AUTH_ENDPOINT + "/token",
-                    List.of(Map.entry("grant_type", "password")),
-                    jsonBody,
-                    null
-            );
-
-            return objectMapper.readValue(responseBody, AuthResponse.class);
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to sign in user", e);
-        }
+        return post(
+                "/token",
+                PASSWORD_GRANT,
+                body,
+                AuthResponse.class,
+                "Failed to sign in user"
+        );
     }
 
+    /**
+     * Refreshes an access token using a refresh token.
+     */
     public AuthResponse refreshAccessToken(String refreshToken) {
-        Objects.requireNonNull(refreshToken, "refreshToken must not be null");
+        requireNonBlank(refreshToken, "refreshToken");
 
-        try {
-            Map<String, String> body = new HashMap<>();
-            body.put("refresh_token", refreshToken);
+        Map<String, String> body = Map.of(
+                "refresh_token", refreshToken
+        );
 
-            String jsonBody = objectMapper.writeValueAsString(body);
-
-            String responseBody = http.post(
-                    AUTH_ENDPOINT + "/token",
-                    List.of(Map.entry("grant_type", "refresh_token")),
-                    jsonBody,
-                    null
-            );
-
-            return objectMapper.readValue(responseBody, AuthResponse.class);
-
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to refresh token", e);
-        }
+        return post(
+                "/token",
+                REFRESH_GRANT,
+                body,
+                AuthResponse.class,
+                "Failed to refresh access token"
+        );
     }
 
+    /**
+     * Retrieves the currently authenticated user.
+     *
+     * @return authenticated user
+     * @throws IllegalStateException if no access token is present
+     */
     public User getUser() {
-        if (accessToken == null) {
-            throw new IllegalStateException(
-                    "No access token present. Create an authenticated SupabaseClient first."
-            );
-        }
+        requireAuthenticated();
 
         try {
             String responseBody = http.get(
@@ -132,12 +139,13 @@ public class AuthClient {
         }
     }
 
+    /**
+     * Signs out the currently authenticated user.
+     *
+     * @throws IllegalStateException if no access token is present
+     */
     public void signOut() {
-        if (accessToken == null) {
-            throw new IllegalStateException(
-                    "No access token present. Create an authenticated SupabaseClient first."
-            );
-        }
+        requireAuthenticated();
 
         try {
             http.post(
@@ -149,6 +157,57 @@ public class AuthClient {
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to sign out user", e);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // INTERNALS
+    // ---------------------------------------------------------
+
+    private <T> T post(
+            String path,
+            List<Map.Entry<String, String>> queryParams,
+            Object body,
+            Class<T> responseType,
+            String errorMessage
+    ) {
+        try {
+            String jsonBody = objectMapper.writeValueAsString(body);
+
+            String responseBody = http.post(
+                    AUTH_ENDPOINT + path,
+                    queryParams,
+                    jsonBody,
+                    null
+            );
+
+            return objectMapper.readValue(responseBody, responseType);
+
+        } catch (JacksonException e) {
+            throw new RuntimeException(errorMessage, e);
+        }
+    }
+
+    /**
+     * Ensures the client has an access token.
+     */
+    private void requireAuthenticated() {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new IllegalStateException(
+                    "No access token present. " +
+                            "Create an authenticated SupabaseClient first."
+            );
+        }
+    }
+
+    /**
+     * Ensures a value is not null or blank.
+     */
+    private static void requireNonBlank(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(
+                    field + " must not be null or blank"
+            );
         }
     }
 }

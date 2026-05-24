@@ -19,13 +19,13 @@ It is designed for backend engineers building on the JVM who want a clean, produ
 
 ## Status
 
-| Module | Status |
-|---|---|
+| Module | Status        |
+|---|---------------|
 | PostgREST (Database) | ✅ Implemented |
-| Auth (GoTrue) | 🔜 Planned |
-| Storage | 🔜 Planned |
-| Edge Functions | 🔜 Planned |
-| Realtime | 🔜 Planned |
+| Auth (GoTrue) | ✅ Implemented |
+| Storage | 🔜 Planned    |
+| Edge Functions | 🔜 Planned    |
+| Realtime | 🔜 Planned    |
 
 ## Quickstart
 
@@ -39,6 +39,8 @@ List<User> users = client.postgrest()
     .limit(10)
     .selectList(User.class);
 ```
+
+**example-service/QUICKSTART.md** has a more detailed quickstart guide with step-by-step instructions and troubleshooting tips.
 
 ---
 
@@ -67,33 +69,62 @@ Add the following dependency to your `pom.xml`:
 
 ## Getting Started
 
-### 1. Create a client
+### Create a client
 
 Instantiate `SupabaseClient` once and reuse it across your application. It is thread-safe.
 
 ```java
+// With anon key (public access)
 SupabaseClient client = new SupabaseClient(
     "https://xyz.supabase.co",
     "your-anon-key"
 );
-```
 
-To inject a custom `OkHttpClient` (for timeouts, interceptors, proxies, etc.):
+// With access token (authenticated user)
+SupabaseClient client = new SupabaseClient(
+        "https://xyz.supabase.co",
+        "your-anon-key",
+        "user-access-token"
+);
+```
+---
+
+## Auth — Authentication
+
+All auth operations start from `client.auth()`.
+
+### Sign up
 
 ```java
-OkHttpClient httpClient = new OkHttpClient.Builder()
-    .connectTimeout(10, TimeUnit.SECONDS)
-    .readTimeout(30, TimeUnit.SECONDS)
-    .addInterceptor(new LoggingInterceptor())
-    .build();
+AuthResponse response = client.auth().signUp(
+        "user@example.com",
+        "password123"
+);
 
-SupabaseClient client = new SupabaseClient(
-    "https://xyz.supabase.co",
-    "your-anon-key",
-    httpClient
+String accessToken = response.getAccessToken();
+String refreshToken = response.getRefreshToken();
+```
+
+## Sign in
+
+```java
+AuthResponse response = client.auth().signIn(
+        "user@example.com",
+        "password123"
 );
 ```
 
+## Sign out
+
+```java
+client.auth().signOut("access-token");
+```
+
+## Refresh token
+
+```java
+AuthResponse response = client.auth().refreshToken("refresh-token");
+```
 ---
 
 ## PostgREST — Database
@@ -360,24 +391,6 @@ try {
 
 ---
 
-## Architecture
-
-```
-SupabaseClient
-└── PostgrestClient          ← entry point for all DB operations
-    └── PostgrestQueryBuilder  ← immutable fluent builder
-        └── PostgrestExecutor  ← internal HTTP + deserialization engine
-            └── SupabaseHttpClient  ← OkHttp wrapper, auth headers, URL construction
-```
-
-- **`SupabaseClient`** — root client, owns shared `OkHttpClient` and `ObjectMapper`
-- **`PostgrestClient`** — exposes `from()` and `rpc()` / `rpcList()`
-- **`PostgrestQueryBuilder`** — immutable builder; terminal methods fire the request
-- **`PostgrestExecutor`** — internal only; handles headers, serialization, deserialization
-- **`SupabaseHttpClient`** — thin OkHttp wrapper; attaches `apikey` and `Authorization` headers
-
----
-
 ## Dependencies
 
 | Dependency | Purpose |
@@ -416,7 +429,7 @@ mvn test
 
 ## Roadmap
 
-- [ ] **Auth (GoTrue)** — signup, login, logout, token refresh, session management
+- [x] **Auth (GoTrue)** — signup, login, logout, token refresh, session management
 - [ ] **Storage** — bucket management, file upload and download
 - [ ] **Edge Functions** — invoke Supabase Edge Functions
 - [ ] **Realtime** — WebSocket subscriptions to database changes
