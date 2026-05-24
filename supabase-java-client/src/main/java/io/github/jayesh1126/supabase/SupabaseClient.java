@@ -97,7 +97,7 @@ public class SupabaseClient {
         );
 
         this.postgrest = new PostgrestClient(http, objectMapper);
-        this.authClient = new AuthClient(http, objectMapper);
+        this.authClient = new AuthClient(http, objectMapper, accessToken);
 
         this.accessToken = accessToken;
         this.supabaseUrl = supabaseUrl;

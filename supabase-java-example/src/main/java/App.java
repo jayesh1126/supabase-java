@@ -1,5 +1,7 @@
 import io.github.cdimascio.dotenv.Dotenv;
 import io.github.jayesh1126.supabase.SupabaseClient;
+import io.github.jayesh1126.supabase.auth.model.AuthResponse;
+import io.github.jayesh1126.supabase.auth.model.User;
 import io.github.jayesh1126.supabase.exception.SupabaseException;
 
 import java.util.List;
@@ -12,7 +14,15 @@ public class App {
 
         String url = dotenv.get("SUPABASE_URL");
         String key = dotenv.get("SUPABASE_API_KEY");
+
         SupabaseClient client = new SupabaseClient(url, key);
+
+        AuthResponse auth = testAuthentication(client);
+
+        SupabaseClient authenticatedClient =
+                client.withAccessToken(auth.accessToken());
+
+        testAuthenticatedUser(authenticatedClient);
 
         // Run each section independently.
         // Comment out sections you haven't set up yet.
@@ -439,5 +449,85 @@ public class App {
             System.out.println("        details="       + e.getDetails());
         if (e.getHint() != null)
             System.out.println("        hint="          + e.getHint());
+    }
+
+    static AuthResponse testAuthentication(SupabaseClient client) {
+        section("AUTHENTICATION");
+
+        try {
+            String email = "test@example.com";
+            String password = "password123";
+
+            // ----------------------------
+            // SIGN UP
+            // ----------------------------
+            log("--- sign up ---");
+
+            AuthResponse signup = client.auth()
+                    .signUpWithEmail(email, password);
+
+            log("Signup successful");
+            log("User ID: " + signup.user().id());
+
+            // ----------------------------
+            // SIGN IN
+            // ----------------------------
+            log("--- sign in ---");
+
+            AuthResponse login = client.auth()
+                    .signInWithEmail(email, password);
+
+            log("Login successful");
+            log("Access token: " + login.accessToken());
+            log("Refresh token: " + login.refreshToken());
+
+            return login;
+
+        } catch (SupabaseException e) {
+            error(e);
+            throw e;
+        }
+    }
+
+    static void testAuthenticatedUser(SupabaseClient client) {
+        section("AUTHENTICATED USER");
+
+        try {
+            User user = client.auth().getUser();
+
+            log("Authenticated user:");
+            log("ID: " + user.id());
+            log("Email: " + user.email());
+
+        } catch (SupabaseException e) {
+            error(e);
+        }
+    }
+
+    static void testRefreshToken(SupabaseClient client, String refreshToken) {
+        section("REFRESH TOKEN");
+
+        try {
+            AuthResponse refreshed = client.auth()
+                    .refreshAccessToken(refreshToken);
+
+            log("New access token:");
+            log(refreshed.accessToken());
+
+        } catch (SupabaseException e) {
+            error(e);
+        }
+    }
+
+    static void testLogout(SupabaseClient client) {
+        section("LOGOUT");
+
+        try {
+            client.auth().signOut();
+            log("Signed out successfully");
+
+        } catch (SupabaseException e) {
+            error(e);
+        }
     }
 }
