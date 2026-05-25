@@ -29,7 +29,7 @@ import io.github.jayesh1126.supabase.exception.SupabaseException;
  * Every request includes:
  * <ul>
  *   <li>{@code apikey}</li>
- *   <li>{@code Authorization: Bearer <apikey>}</li>
+ *   <li>{@code Authorization: Bearer <access-token-or-api-key>}</li>
  * </ul>
  *
  * <p><b>Query parameters:</b>
@@ -53,6 +53,7 @@ public class SupabaseHttpClient {
     private final OkHttpClient client;
     private final HttpUrl baseUrl;
     private final String apiKey;
+    private final String accessToken;
 
     /**
      * Creates a new HTTP client for Supabase.
@@ -64,7 +65,7 @@ public class SupabaseHttpClient {
      * @throws NullPointerException     if any argument is null
      * @throws IllegalArgumentException if {@code baseUrl} is not a valid URL
      */
-    public SupabaseHttpClient(String baseUrl, String apiKey, OkHttpClient client) {
+    public SupabaseHttpClient(String baseUrl, String apiKey, OkHttpClient client, String accessToken) {
         Objects.requireNonNull(baseUrl, "baseUrl must not be null");
         Objects.requireNonNull(apiKey,  "apiKey must not be null");
         Objects.requireNonNull(client,  "client must not be null");
@@ -77,6 +78,7 @@ public class SupabaseHttpClient {
         this.baseUrl = parsed;
         this.client  = client;
         this.apiKey  = apiKey;
+        this.accessToken = accessToken;
     }
 
     /**
@@ -225,10 +227,15 @@ public class SupabaseHttpClient {
 
         HttpUrl url = buildUrl(path, queryParams);
 
+        String bearerToken =
+                accessToken != null && !accessToken.isBlank()
+                        ? accessToken
+                        : apiKey;
+
         Request.Builder builder = new Request.Builder()
                 .url(url)
                 .addHeader("apikey", apiKey)
-                .addHeader("Authorization", "Bearer " + apiKey);
+                .addHeader("Authorization", "Bearer " + bearerToken);
 
         if (headers != null) {
             headers.forEach(builder::addHeader);
